@@ -1,7 +1,15 @@
-require(['jquery'], function ($) {
+/**
+ *
+ * @category    payment gateway
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
+ * @copyright   (https://tpay.com)
+ */
+require(['jquery', 'mage/translate'], function ($, $t) {
 
     function ShowChannelsCombo() {
-        var str = '<p><strong>Wybierz jeden ze sposobów płatnośći:</strong></p><div id="kanal"></div>';
+       var title  = $t('Choose payment method');
+        var str = '<p><strong>' + title + ':</strong></p><div id="kanal"></div>';
 
         for (var i = 0; i < tr_channels.length; i++) {
             if (addChannelToList(tr_channels[i]) === true) {
@@ -25,10 +33,8 @@ require(['jquery'], function ($) {
             if (!blik) {
                 $("html,body").animate({scrollTop: $('body').height() - 150}, 600);
             }
-            ;
         });
     }
-
 
     function showBlikInput(kanal) {
         if (window.checkoutConfig.tpay.payment.blikStatus !== true) {
@@ -77,7 +83,6 @@ require(['jquery'], function ($) {
     }
 
     jQuery.getScript("https://secure.tpay.com/channels-" + window.checkoutConfig.tpay.payment.merchantId + showOnlyOnlinePayments() + ".js", function () {
-
         ShowChannelsCombo()
         CheckBlikLevelZeroAsDefault()
     });

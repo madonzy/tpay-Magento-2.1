@@ -3,6 +3,7 @@ magento2-tpaycom
 
 tpaycom payment gateway Magento2 extension
 
+**Module was made for educational purposes only, do not use in production! You can read the full article 
 
 Install
 =======
@@ -22,5 +23,5 @@ Install
 Other Notes
 ===========
 
-tpaycom works with PLN only! If PLN is not your base currency, you will not see this module on checkout pages. 
+tpaycom works with PLN only!** If PLN is not your base currency, you will not see this module on checkout pages. 
 

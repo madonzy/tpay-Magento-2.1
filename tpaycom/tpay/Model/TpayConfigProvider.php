@@ -1,161 +1,163 @@
 <?php
-
 /**
+ *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
+
 namespace tpaycom\tpay\Model;
 
 use Magento\Checkout\Model\ConfigProviderInterface;
-use Magento\Payment\Model\InfoInterface;
-use Magento\TestFramework\Event\Magento;
-use tpaycom\tpay\Model\Tpay;
-use \Magento\Payment\Model\Method;
+use Magento\Framework\View\Asset\Repository;
+use Magento\Payment\Model\MethodInterface;
+use tpaycom\tpay\Api\TpayInterface;
 
 use Magento\Payment\Helper\Data as PaymentHelper;
 
 /**
  * Class TpayConfigProvider
+ *
  * @package tpaycom\tpay\Model
  */
-
 class TpayConfigProvider implements ConfigProviderInterface
 {
     /**
-     * @var \Magento\Payment\Model\MethodInterface
+     * @var Repository
      */
-    private $methodInstance;
+    protected $assetRepository;
+
     /**
-     * @var string
+     * @var PaymentHelper
      */
-    private $methodCode = Tpay::CODE;
+    protected $paymentHelper;
+
     /**
-     * @var \Magento\Checkout\Model\Session
+     * @var TpayInterface
      */
+    protected $paymentMethod;
 
-    private $objectManager;
-
-    private $checkoutSession;
-
-    public $storeManager;
-
+    /**
+     * TpayConfigProvider constructor.
+     *
+     * @param PaymentHelper $paymentHelper
+     * @param Repository    $assetRepository
+     */
     public function __construct(
         PaymentHelper $paymentHelper,
-        \Magento\Checkout\Model\Session $checkoutSession,
-        \Magento\Payment\Helper\Data $paymentData,
-        \Magento\Store\Model\StoreManagerInterface $storeManager
+        Repository $assetRepository
     ) {
-        $this->objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-        $this->methodInstance = $paymentHelper->getMethodInstance($this->methodCode);
-        $this->checkoutSession = $checkoutSession;
-        $this->storeManager = $storeManager;
+        $this->assetRepository = $assetRepository;
+        $this->paymentHelper   = $paymentHelper;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getConfig()
     {
-        $tpay = $this->methodInstance;
+        $tpay = $this->getPaymentMethodInstance();
 
         $config = [
             'tpay' => [
                 'payment' => [
                     'redirectUrl'         => $tpay->getPaymentRedirectUrl(),
-                    'tpayLogoUrl'         => $this->getTpayLogoUrlUrl(),
+                    'tpayLogoUrl'         => $this->generateURL('tpaycom_tpay::images/logo_tpay.png'),
                     'merchantId'          => $tpay->getMerchantId(),
                     'showPaymentChannels' => $this->showChannels(),
                     'getTerms'            => $this->getTerms(),
-                    'addCSS'              => $this->addCSS(),
-                    'blikStatus'          => $this->blikStatus(),
-                    'onlyOnlineChannels'  => $this->onlyOnlineChannels(),
-                    'getBlikChannelID'    => $this->getBlikChannelID(),
-                    'getBlikPaymentLogo'  => $this->getBlikPaymentLogo(),
-                ]
-            ]
+                    'addCSS'              => $this->createCSS('tpaycom_tpay::css/tpay.css'),
+                    'blikStatus'          => $this->getPaymentMethodInstance()->checkBlikLevel0Settings(),
+                    'onlyOnlineChannels'  => $this->getPaymentMethodInstance()->onlyOnlineChannels(),
+                    'getBlikChannelID'    => Transaction::BLIK_CHANNEL,
+                    'getBlikPaymentLogo'  => $this->generateURL('tpaycom_tpay::images/blik_payment.png'),
+                ],
+            ],
         ];
 
         return $tpay->isAvailable() ? $config : [];
     }
 
+    /**
+     * @return string|null
+     */
     public function showChannels()
     {
-        if ($this->methodInstance->showPaymentChannels()) {
+        if ($this->getPaymentMethodInstance()->showPaymentChannels()) {
             $script = 'tpaycom_tpay::js/render_channels.js';
 
             return $this->createScript($script);
         }
+
+        return null;
     }
 
-    public function blikStatus()
-    {
-        return $this->methodInstance->checkBlikLevel0Settings();
-    }
-
-    public function onlyOnlineChannels()
-    {
-        return $this->methodInstance->onlyOnlineChannels();
-    }
-
-    public function getBlikChannelID()
-    {
-        return Transaction::BLIK_CHANNEL;
-    }
-
-    public function addCSS()
-    {
-        $css = 'tpaycom_tpay::css/tpay.css';
-
-        return $this->createCSS($css);
-    }
-
+    /**
+     * @return string|null
+     */
     public function getTerms()
     {
-        if ($this->methodInstance->showPaymentChannels()) {
+        if ($this->getPaymentMethodInstance()->showPaymentChannels()) {
             $textAcceptTerms = __('Akceptuję regulamin tpay.com');
 
-            return <<<HTML
-        <div style="margin: 15px 0 0 0; text-align: center">
-               <input  type="checkbox"  checked name="akceptuje_regulamin" id="akceptuje_regulamin" />
-               <label for="akceptuje_regulamin">
-               <a target="_blank" href="{$this->methodInstance->getTermsURL()}">{$textAcceptTerms}</a>.</label></div>
-HTML;
+            return "
+            <div style=\"margin: 15px 0 0 0; text-align: center\">
+                <input  type=\"checkbox\"  checked name=\"akceptuje_regulamin\" id=\"akceptuje_regulamin\" />
+                <label for=\"akceptuje_regulamin\">
+                    <a target=\"_blank\" href=\"{$this->getPaymentMethodInstance()->getTermsURL()}\">{$textAcceptTerms}</a>.
+                </label>
+            </div>";
         }
+
+        return null;
     }
 
+    /**
+     * @param string $script
+     *
+     * @return string
+     */
     public function createScript($script)
     {
-        return <<<HTML
-            <script type="text/javascript">
+        return "
+            <script type=\"text/javascript\">
                 require(['jquery'], function ($) {
                     $.getScript('{$this->generateURL($script)}');
 
                 });
-            </script>
-HTML;
+            </script>";
     }
 
+    /**
+     * @param string $css
+     *
+     * @return string
+     */
     public function createCSS($css)
     {
-        return <<<HTML
-             <link rel="stylesheet" type="text/css" href="{$this->generateURL($css)}">
-
-HTML;
+        return "<link rel=\"stylesheet\" type=\"text/css\" href=\"{$this->generateURL($css)}\">";
     }
 
-    public function getTpayLogoUrlUrl()
-    {
-        return $this->generateURL('tpaycom_tpay::images/logo_tpay.png');
-    }
-
-    public function getBlikPaymentLogo()
-    {
-        return $this->generateURL('tpaycom_tpay::images/blik_payment.png');
-    }
-
+    /**
+     * @param string $name
+     *
+     * @return string
+     */
     public function generateURL($name)
     {
-        $assetRepository = $this->objectManager->get('Magento\Framework\View\Asset\Repository');
+        return $this->assetRepository->createAsset($name)->getUrl();
+    }
 
-        return $assetRepository->createAsset($name)->getUrl();
+    /**
+     * @return TpayInterface|MethodInterface
+     */
+    protected function getPaymentMethodInstance()
+    {
+        if (null === $this->paymentMethod) {
+            $this->paymentMethod = $this->paymentHelper->getMethodInstance(TpayInterface::CODE);
+        }
+
+        return $this->paymentMethod;
     }
 }

@@ -9,10 +9,14 @@
 
 namespace tpaycom\tpay\lib;
 
-
+/**
+ * Class Type
+ *
+ * @package tpaycom\tpay\lib
+ */
 class Type
 {
     const STRING = 'string';
-    const FLOAT = 'float';
-    const INT = 'int';
+    const FLOAT  = 'float';
+    const INT    = 'int';
 }

@@ -9,11 +9,15 @@
 
 namespace tpaycom\tpay\lib;
 
-
+/**
+ * Class FieldProperties
+ *
+ * @package tpaycom\tpay\lib
+ */
 class FieldProperties
 {
-    const REQ = 'required';
-    const TYPE = 'type';
+    const REQ        = 'required';
+    const TYPE       = 'type';
     const VALIDATION = 'validation';
-    const OPTIONS = 'options';
+    const OPTIONS    = 'options';
 }

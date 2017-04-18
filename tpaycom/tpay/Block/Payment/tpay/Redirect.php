@@ -1,165 +1,124 @@
 <?php
-
 /**
  *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
 
 namespace tpaycom\tpay\Block\Payment\tpay;
 
+use Magento\Framework\View\Element\Template;
+use Magento\Framework\View\Element\Template\Context;
+use tpaycom\tpay\Api\TpayInterface;
+use tpaycom\tpay\Block\Payment\tpay\Redirect\Form;
+
 /**
  * Class Redirect
+ *
  * @package tpaycom\tpay\Block\Payment\tpay
  */
-
-class Redirect extends \Magento\Framework\View\Element\AbstractBlock
+class Redirect extends Template
 {
-
-    const NAME = 'name';
-
-    const VALUE = 'value';
-
-    /**
-     * @var \Magento\Framework\Data\FormFactory
-     */
-    private $formFactory;
-
     /**
      * @var string
      */
-    private $orderId;
-
-    private $additionalPaymentInformation;
+    protected $orderId;
 
     /**
-     * @var \Magento\Framework\ObjectManagerInterface
+     * @var array
      */
-    private $objectManager;
+    protected $additionalPaymentInformation = [];
 
     /**
-     * @var \Magento\Sales\Model\Order
+     * @var TpayInterface
      */
-    private $orderModel;
+    protected $tpay;
 
     /**
-     * @var \tpaycom\tpay\Model\Tpay
-     */
-    private $tpayModel;
-
-    /**
-     * Redirect constructor.
-     * @param \Magento\Framework\View\Element\Context $context
-     * @param \Magento\Framework\Data\FormFactory $formFactory
-     * @param \Magento\Framework\ObjectManagerInterface $objectmanager
-     * @param \Magento\Sales\Model\Order $OrderModel
-     * @param \tpaycom\tpay\Model\Tpay $TpayModel
-     * @param array $data
+     * {@inheritdoc}
+     *
+     * @param TpayInterface $tpayModel
+     * @param array         $data
      */
     public function __construct(
-        \Magento\Framework\View\Element\Context $context,
-        \Magento\Framework\Data\FormFactory $formFactory,
-        \Magento\Framework\ObjectManagerInterface $objectmanager,
-        \Magento\Sales\Model\Order $orderModel,
-        \tpaycom\tpay\Model\Tpay $tpayModel,
+        Context $context,
+        TpayInterface $tpayModel,
         array $data = []
     ) {
-        $this->formFactory = $formFactory;
-        $this->objectManager = $objectmanager;
-        $this->orderModel = $orderModel;
-        $this->tpayModel = $tpayModel;
+        $this->tpay        = $tpayModel;
+
         parent::__construct(
             $context,
             $data
         );
     }
 
-    /**Get form Html
+    /**
+     * @param int $orderId
      *
-     * @param $currentOrderId
-     * @param $additionalPaymentInformation
-     * @return bool|string
+     * @return $this
      */
-
-    public function getFormHtml($currentOrderId, $additionalPaymentInformation)
+    public function setOrderId($orderId)
     {
-        $this->additionalPaymentInformation = $additionalPaymentInformation;
-        $this->orderId = $currentOrderId;
+        $this->orderId = $orderId;
 
-        return $this->toFormHtml();
+        return $this;
     }
 
-    /** Create a page  with form  which redirecting to tpay.com
+    /**
+     * @param array $additionalPaymentInformation
      *
-     * @return bool|string
-     * @throws \Magento\Framework\Exception\LocalizedException
+     * @return $this
      */
-    private function toFormHtml()
+    public function setAdditionalPaymentInformation(array $additionalPaymentInformation)
     {
-        $currentOrderId = $this->orderId !== null ?
-            $this->orderId : $this->objectManager->get('Magento\Checkout\Model\Session')->getLastRealOrderId();
+        $this->additionalPaymentInformation = $additionalPaymentInformation;
 
-        if ($currentOrderId === null) {
+        return $this;
+    }
+
+    /**
+     * Get form Html
+     *
+     * @return string
+     */
+    public function getFormHtml()
+    {
+        /** @var Form $formBlock */
+        $formBlock = $this->getChildBlock('form');
+
+        $formBlock
+            ->setOrderId($this->orderId)
+            ->setAction($this->tpay->getRedirectURL())
+            ->setTpayData($this->tpay->getTpayFormData($this->orderId))
+            ->setAdditionalInformation($this->additionalPaymentInformation);
+
+        return $formBlock->toHtml();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function _construct()
+    {
+        $this->setTemplate('tpaycom_tpay::redirect.phtml');
+
+        parent::_construct();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function _toHtml()
+    {
+        if ($this->orderId === null) {
             return false;
         }
 
-        $order = $this->orderModel->loadByIncrementId($currentOrderId);
-        $order->addStatusToHistory(
-            \Magento\Sales\Model\Order::STATE_PENDING_PAYMENT,
-            __('Waiting for tpay.com payment.')
-        );
-        $order->setSendEmail(true);
-        $order->save();
+        $this->addChild('form', 'tpaycom\tpay\Block\Payment\tpay\Redirect\Form');
 
-        $form = $this->createForm($currentOrderId);
-
-        return <<<HTML
-                <html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/></head><body>
-        <div align="center">
-        {__("W celu dokończenia płatności zostaniesz przekierowany do tpay.com.
-                    Wybierz przycisk jeśli przekierowanie nie nastąpiło automatycznie")}</br>
-        {$form->toHtml()}
-        <script type="text/javascript">document.getElementById("tpaycom_tpay_checkout").submit();</script>
-         </div></body></html>
-HTML;
-
-
-    }
-
-    /** Create a form with order data
-     *
-     * @param $currentOrderId
-     * @return mixed
-     */
-
-    private function createForm($currentOrderId)
-    {
-
-        $form = $this->formFactory->create();
-        $form->setAction($this->tpayModel->getRedirectURL())
-            ->setId('tpaycom_tpay_checkout')
-            ->setName('tpaycom_tpay_checkout')
-            ->setMethod('POST')
-            ->setUseContainer(true);
-
-        foreach ($this->tpayModel->getTpayFormData($currentOrderId) as $field => $value) {
-            $form->addField($field, 'hidden', [static::NAME => $field, static::VALUE => $value]);
-        }
-
-        foreach ($this->additionalPaymentInformation as $field => $value) {
-            if (!empty($value)) {
-                $form->addField($field, 'hidden', [static::NAME => $field, static::VALUE => $value]);
-            }
-        }
-
-        $form->addField(
-            'sumbit',
-            'submit',
-            [static::NAME => 'redirect', static::VALUE => __('Przekierowanie do  tpay.com.'), 'align' => 'center']
-        );
-
-        return $form;
+        return parent::_toHtml();
     }
 }

@@ -1,7 +1,8 @@
 /**
+ *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
 define(
@@ -22,7 +23,6 @@ define(
             getCode: function () {
                 return 'tpaycom_tpay';
             },
-
 
 
             afterPlaceOrder: function () {
@@ -64,7 +64,7 @@ define(
 
             getData: function () {
                 var parent = this._super(),
-                paymentData = {};
+                    paymentData = {};
                 paymentData['kanal'] = $('input[name="channel"]').val();
                 paymentData['blik_code'] = $('input[name="blik_code"]').val();
                 paymentData['akceptuje_regulamin'] = $('input[name="akceptuje_regulamin"]').val();

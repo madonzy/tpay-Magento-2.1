@@ -1,18 +1,23 @@
-
-
+/*
+ * @category    payment gateway
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
+ * @copyright   (https://tpay.com)
+ */
 .check {
     margin: 6% 0 0 0;
     height: 80%
 }
 
 .checked {
-    box-shadow: 0px 0px 10px 3px #15428F ;
+    box-shadow: 0px 0px 10px 3px #15428F;
 }
+
 .channel {
     cursor: pointer;
     display: inline-block;
     width: 140px;
-    height:70px;
+    height: 70px;
     margin: 13px 20px 0px 0;
     text-align: center;
     border: 1px solid #b2b2b2;
@@ -31,27 +36,28 @@
     display: none;
 }
 
-input.blik{
+input.blik {
     border: 1.2px solid red
 }
 
-p.blik{
+p.blik {
     position: absolute;
     margin: 8% 0px 0px 50%;
     font-size: 20.5px;
 }
 
 .font {
-    font-family:sans-serif;
+    font-family: sans-serif;
 }
+
 #input_container {
-    position:relative;
-    margin:0;
+    position: relative;
+    margin: 0;
     height: 320px;
     width: 388px;
 
-
 }
+
 #blik_code_input {
     position: absolute;
     top: 225px;
@@ -63,8 +69,9 @@ p.blik{
     font-size: 18px;
     letter-spacing: 16px;
 }
+
 #blik_img {
-    position:absolute;
-    left:10px;
+    position: absolute;
+    left: 10px;
 
 }

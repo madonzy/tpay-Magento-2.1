@@ -1,89 +1,104 @@
 <?php
-
 /**
+ *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
 
 namespace tpaycom\tpay\Model;
 
+use Magento\Checkout\Model\Session;
+use Magento\Framework\Api\AttributeValueFactory;
+use Magento\Framework\Api\ExtensionAttributesFactory;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\DataObject;
+use Magento\Framework\Model\Context;
+use Magento\Framework\Registry;
+use Magento\Framework\UrlInterface;
+use Magento\Framework\Escaper;
+use Magento\Payment\Helper\Data;
+use Magento\Payment\Model\Method\AbstractMethod;
+use Magento\Payment\Model\Method\Adapter;
+use Magento\Payment\Model\Method\Logger;
+use Magento\Quote\Api\Data\CartInterface;
+use tpaycom\tpay\Api\Sales\OrderRepositoryInterface;
+use tpaycom\tpay\Api\TpayInterface;
 /**
  * Class Tpay
+ *
  * @package tpaycom\tpay\Model
  */
-class Tpay extends \Magento\Payment\Model\Method\AbstractMethod
+class Tpay extends AbstractMethod implements TpayInterface
 {
-    const CODE = 'tpaycom_tpay';
-
-    const CHANNEL = 'kanal';
-
-    const BLIK_CODE = 'blik_code';
-
-    const TERMS_ACCEPT = 'akceptuje_regulamin';
-
-    protected $_code = self::CODE;
-
-    protected $_isGateway = true;
-    protected $_canCapture = true;
-    protected $_canCapturePartial = true;
-    protected $_comApi = false;
-
-    protected $_countryFactory;
-
-    protected $_minAmount = null;
-    protected $_maxAmount = null;
-    protected $_availableCurrencyCodes = array('PLN');
-
-    private $redirectURL = 'https://secure.tpay.com';
-
-    private $termsURL = 'https://secure.tpay.com/regulamin.pdf';
-
-    private $storeManager;
-
-    private $objectManager;
-
-    /** Min. order amount for BLIK level 0
-     * @var float
+    /**#@+
+     * Payment configuration
      */
+    protected $_code              = self::CODE;
+    protected $_isGateway         = true;
+    protected $_canCapture        = true;
+    protected $_canCapturePartial = true;
+    /*#@-*/
 
-    private $minAmountBlik = 1.01;
+    protected $availableCurrencyCodes = ['PLN'];
 
-
-    private $urlBuilder;
+    protected $redirectURL = 'https://secure.tpay.com';
+    protected $termsURL    = 'https://secure.tpay.com/regulamin.pdf';
 
     /**
-     * Tpay constructor.
-     * @param \Magento\Framework\Model\Context $context
-     * @param \Magento\Framework\Registry $registry
-     * @param \Magento\Framework\Api\ExtensionAttributesFactory $extensionFactory
-     * @param \Magento\Framework\Api\AttributeValueFactory $customAttributeFactory
-     * @param \Magento\Payment\Helper\Data $paymentData
-     * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
-     * @param \Magento\Payment\Model\Method\Logger $logger
-     * @param \Magento\Directory\Model\CountryFactory $countryFactory
-     * @param \Magento\Store\Model\StoreManagerInterface $storeManager
-     * @param \Magento\Framework\UrlInterface $urlBuilder
-     * @param \Magento\Framework\ObjectManagerInterface $objectManager
-     * @param array $data
+     * Min. order amount for BLIK level 0
+     *
+     * @var float
+     */
+    protected $minAmountBlik = 1.01;
+
+    /**
+     * @var UrlInterface
+     */
+    protected $urlBuilder;
+
+    /**
+     * @var Session
+     */
+    protected $checkoutSession;
+
+    /**
+     * @var OrderRepositoryInterface
+     */
+    protected $orderRepository;
+
+    /**
+     * @var Escaper
+     */
+    protected $escaper;
+
+    /**
+     * {@inheritdoc}
+     *
+     * @param UrlInterface             $urlBuilder
+     * @param Session                  $checkoutSession
+     * @param OrderRepositoryInterface $orderRepository
      */
     public function __construct(
-        \Magento\Framework\Model\Context $context,
-        \Magento\Framework\Registry $registry,
-        \Magento\Framework\Api\ExtensionAttributesFactory $extensionFactory,
-        \Magento\Framework\Api\AttributeValueFactory $customAttributeFactory,
-        \Magento\Payment\Helper\Data $paymentData,
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Payment\Model\Method\Logger $logger,
-        \Magento\Directory\Model\CountryFactory $countryFactory,
-        \Magento\Store\Model\StoreManagerInterface $storeManager,
-        \Magento\Framework\UrlInterface $urlBuilder,
-        \Magento\Framework\ObjectManagerInterface $objectManager,
+        Context $context,
+        Registry $registry,
+        ExtensionAttributesFactory $extensionFactory,
+        AttributeValueFactory $customAttributeFactory,
+        Data $paymentData,
+        ScopeConfigInterface $scopeConfig,
+        Logger $logger,
+        UrlInterface $urlBuilder,
+        Session $checkoutSession,
+        OrderRepositoryInterface $orderRepository,
+        Escaper $escaper,
         $data = []
     ) {
-        $this->storeManager = $storeManager;
-        $this->objectManager = $objectManager;
+        $this->urlBuilder      = $urlBuilder;
+        $this->escaper         = $escaper;
+        $this->checkoutSession = $checkoutSession;
+        $this->orderRepository = $orderRepository;
+
         parent::__construct(
             $context,
             $registry,
@@ -96,64 +111,75 @@ class Tpay extends \Magento\Payment\Model\Method\AbstractMethod
             null,
             $data
         );
-
-        $this->_countryFactory = $countryFactory;
-        $this->urlBuilder = $urlBuilder;
-        $this->_minAmount = $this->getConfigData('min_order_total');
-        $this->_maxAmount = $this->getConfigData('max_order_total');
     }
 
-    public function getCheckout()
-    {
-        return $this->objectManager->get('Magento\Checkout\Model\Session');
-    }
-
+    /**
+     * {@inheritdoc}
+     */
     public function getRedirectURL()
     {
         return $this->redirectURL;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getMerchantId()
     {
-        return (int) $this->getConfigData('merchant_id');
+        return (int)$this->getConfigData('merchant_id');
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getSecurityCode()
     {
         return $this->getConfigData('security_code');
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getApiKey()
     {
         return $this->getConfigData('api_key_tpay');
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getApiPassword()
     {
         return $this->getConfigData('api_password');
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function showPaymentChannels()
     {
         return (bool)$this->getConfigData('show_payment_channels');
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function onlyOnlineChannels()
     {
         return (bool)$this->getConfigData('show_payment_channels_online');
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getBlikLevelZeroStatus()
     {
         return (bool)$this->getConfigData('blik_level_zero');
     }
 
-
-    /**Check that the BLIK Level 0 should be active on a payment channels list
-     *
-     * @return bool
+    /**
+     * {@inheritdoc}
      */
-
     public function checkBlikLevel0Settings()
     {
         if (!$this->showPaymentChannels() || !$this->getBlikLevelZeroStatus() || !$this->checkBlikAmount()) {
@@ -171,96 +197,75 @@ class Tpay extends \Magento\Payment\Model\Method\AbstractMethod
         return true;
     }
 
-    /** Check that the  BLIK should be available for order/quote amount
-     * @return bool
+    /**
+     * {@inheritdoc}
      */
-
-    public function checkBlikAmount()
-    {
-        $amount = $this->getCheckout()->getQuote()->getBaseGrandTotal();
-
-        if (!$amount) {
-            $orderId = $this->getCheckout()->getLastRealOrderId();
-            $order = $this->objectManager->create('Magento\Sales\Model\Order')->loadByIncrementId($orderId);
-            $amount = $order->getGrandTotal();
-        }
-        $amount = number_format($amount, 2);
-
-        return (bool)($amount > $this->minAmountBlik);
-    }
-
-    /** Return url for  a tpay.com terms
-     * @return string
-     */
-
     public function getTermsURL()
     {
         return $this->termsURL;
     }
 
-    /** Prepare payment data for tpay.com
-     * @param null $orderId
-     * @return array
+    /**
+     * {@inheritdoc}
      */
-
     public function getTpayFormData($orderId = null)
     {
-        if ($orderId === null) {
-            $orderId = $this->getCheckout()->getLastRealOrderId();
-        }
-        $order = $this->objectManager->create('Magento\Sales\Model\Order')->loadByIncrementId($orderId);
-        $amount = number_format($order->getGrandTotal(), 2);
-        $merchantId = $this->getMerchantId();
-        $securityCode = $this->getSecurityCode();
-        $crc = base64_encode($orderId);
-        $md5sum = md5($merchantId . $amount . $crc . $securityCode);
-        $name = $order->getBillingAddress()->getData('firstname'). ' '. $order->getBillingAddress()->getData('lastname');
-        $data = [
+        $order          = $this->getOrder($orderId);
+        $billingAddress = $order->getBillingAddress();
+        $amount         = number_format($order->getGrandTotal(), 2);
+        $merchantId     = $this->getMerchantId();
+        $securityCode   = $this->getSecurityCode();
+        $crc            = base64_encode($orderId);
+        $md5sum         = md5($merchantId.$amount.$crc.$securityCode);
+        $name           = $billingAddress->getData('firstname').' '.$billingAddress->getData('lastname');
+        return [
             'id'           => $merchantId,
-            'email'        => $order->getCustomerEmail(),
-            'nazwisko'     => $name,
+            'email'        => $this->escaper->escapeHtml($order->getCustomerEmail()),
+            'nazwisko'     => $this->escaper->escapeHtml($name),
             'kwota'        => $amount,
             'opis'         => 'Zamówienie ' . $orderId,
             'md5sum'       => $md5sum,
             'crc'          => $crc,
-            'adres'        => $order->getBillingAddress()->getData('street'),
-            'miasto'       => $order->getBillingAddress()->getData('city'),
-            'kod'          => $order->getBillingAddress()->getData('postcode'),
+            'adres'        => $this->escaper->escapeHtml($order->getBillingAddress()->getData('street')),
+            'miasto'       => $this->escaper->escapeHtml($order->getBillingAddress()->getData('city')),
+            'kod'          => $this->escaper->escapeHtml($order->getBillingAddress()->getData('postcode')),
+            'kraj'         => $this->escaper->escapeHtml($order->getBillingAddress()->getData('country_id')),
             'pow_url_blad' => $this->urlBuilder->getUrl('tpay/tpay/error'),
             'wyn_url'      => $this->urlBuilder->getUrl('tpay/tpay/notification'),
             'pow_url'      => $this->urlBuilder->getUrl('tpay/tpay/success'),
             'online'       => $this->onlyOnlineChannels() ? '1' : '0',
         ];
-
-        return (array)$data;
     }
 
-    /** Return url to redirect after placed order
-     * @return string
+    /**
+     * {@inheritdoc}
      */
-
     public function getPaymentRedirectUrl()
     {
-        return $this->urlBuilder->getUrl('tpay/tpay/redirect', ['uid' => time() . uniqid(true)]);
+        return $this->urlBuilder->getUrl('tpay/tpay/redirect', ['uid' => time().uniqid(true)]);
     }
 
-    /** Check that tpay.com payments should be available.
+    /**
+     * {@inheritdoc}
      *
-     * @param \Magento\Quote\Api\Data\CartInterface|null $quote
-     * @return bool
+     * Check that tpay.com payments should be available.
      */
-
-    public function isAvailable(\Magento\Quote\Api\Data\CartInterface $quote = null)
+    public function isAvailable(CartInterface $quote = null)
     {
+        $minAmount = $this->getConfigData('min_order_total');
+        $maxAmount = $this->getConfigData('max_order_total');
 
-        if ($quote && (
-                $quote->getBaseGrandTotal() < $this->_minAmount
-                || ($this->_maxAmount && $quote->getBaseGrandTotal() > $this->_maxAmount))
+        if ($quote
+            && (
+                $quote->getBaseGrandTotal() < $minAmount
+                || ($maxAmount && $quote->getBaseGrandTotal() > $maxAmount))
         ) {
             return false;
         }
-        if (!$this->getMerchantId() ||
-            ($quote && !$this->isAvalilableForCurrency($quote->getCurrency()->getQuoteCurrencyCode()))) {
+
+        if (!$this->getMerchantId()
+            || ($quote && !$this->isAvailableForCurrency($quote->getCurrency()->getQuoteCurrencyCode()))
+        ) {
             return false;
         }
 
@@ -268,45 +273,83 @@ class Tpay extends \Magento\Payment\Model\Method\AbstractMethod
     }
 
     /**
-     * Availability for currency
-     *
-     * @param string $currencyCode
-     * @return bool
+     * {@inheritdoc}
      */
-    public function isAvalilableForCurrency($currencyCode)
-    {
-        if (!in_array($currencyCode, $this->_availableCurrencyCodes)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /** Assign additional data from order
-     *
-     * @param \Magento\Framework\DataObject $data
-     * @return $this
-     * @throws \Magento\Framework\Exception\LocalizedException
-     */
-
-    public function assignData(\Magento\Framework\DataObject $data)
+    public function assignData(DataObject $data)
     {
         $additionalData = $data->getData('additional_data');
-        $info = $this->getInfoInstance();
+        $info           = $this->getInfoInstance();
 
         $info->setAdditionalInformation(
             static::CHANNEL,
             isset($additionalData[static::CHANNEL]) ? $additionalData[static::CHANNEL] : ''
         );
+
         $info->setAdditionalInformation(
             static::BLIK_CODE,
             isset($additionalData[static::BLIK_CODE]) ? $additionalData[static::BLIK_CODE] : ''
         );
+
         $info->setAdditionalInformation(
             static::TERMS_ACCEPT,
             isset($additionalData[static::TERMS_ACCEPT]) ? '1' : ''
         );
 
         return $this;
+    }
+
+    /**
+     * @return Session
+     */
+    protected function getCheckout()
+    {
+        return $this->checkoutSession;
+    }
+
+    /**
+     * Availability for currency
+     *
+     * @param string $currencyCode
+     *
+     * @return bool
+     */
+    protected function isAvailableForCurrency($currencyCode)
+    {
+        if (!in_array($currencyCode, $this->availableCurrencyCodes)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check that the  BLIK should be available for order/quote amount
+     *
+     * @return bool
+     */
+    protected function checkBlikAmount()
+    {
+        $amount = $this->getCheckout()->getQuote()->getBaseGrandTotal();
+
+        if (!$amount) {
+            $orderId = $this->getCheckout()->getLastRealOrderId();
+            $order   = $this->orderRepository->getByIncrementId($orderId);
+            $amount  = $order->getGrandTotal();
+        }
+        $amount = number_format($amount, 2);
+
+        return (bool)($amount > $this->minAmountBlik);
+    }
+
+    /**
+     * @return Order
+     */
+    protected function getOrder($orderId = null)
+    {
+        if ($orderId === null) {
+            $orderId = $this->getCheckout()->getLastRealOrderId();
+        }
+
+        return $this->orderRepository->getByIncrementId($orderId);
     }
 }

@@ -1,10 +1,9 @@
 <?php
-
 /**
  *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
 
@@ -88,15 +87,10 @@ abstract class Tpaycom extends \Magento\Framework\App\Action\Action
         parent::__construct($context);
 
         $this->_model->setCustomerID($this->_customerSession->getCustomerId());
-
-
     }
-
 
     protected function getDotAmount()
     {
         return $this->getFormatAmount($this->_checkoutSession->getLastRealOrder()->getGrandTotal());
     }
-
-
 }

@@ -11,6 +11,7 @@ namespace tpaycom\tpay\lib;
 
 /**
  * Class Curl
+ *
  * @package tpaycom\tpay\lib
  */
 class Curl
@@ -20,27 +21,31 @@ class Curl
      *
      * @return mixed
      */
-
     private static $curlInfo;
+
     /**
      * Last executed cURL error
+     *
      * @var string
      */
     private static $curlError = '';
 
     /**
      * Last executed cURL errno
+     *
      * @var string
      */
     private static $curlErrno = '';
 
-    /** Send POST request
-     * @param $url
-     * @param array $postData
+    /**
+     * Send POST request
+     *
+     * @param string $url
+     * @param array  $postData
+     *
      * @return bool|mixed
      */
-
-    public static function doCurlRequest($url, $postData = array())
+    public static function doCurlRequest($url, $postData = [])
     {
         if (!function_exists('curl_init') || !function_exists('curl_exec')) {
             return false;
@@ -60,8 +65,8 @@ class Curl
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_FAILONERROR, true);
             curl_setopt($ch, CURLOPT_URL, $url);
-            $curlRes = curl_exec($ch);
-            static::$curlInfo = curl_getinfo($ch);
+            $curlRes           = curl_exec($ch);
+            static::$curlInfo  = curl_getinfo($ch);
             static::$curlError = curl_error($ch);
             static::$curlErrno = curl_errno($ch);
         } catch (\Exception $e) {
@@ -72,18 +77,20 @@ class Curl
         return static::checkResponse($curlRes);
     }
 
-    /** Check curl response
+    /**
+     * Check curl response
+     *
      * @param $curlRes
+     *
      * @return bool
      */
-
     public static function checkResponse($curlRes)
     {
 
         if (static::$curlInfo['http_code'] !== 200 || $curlRes === false) {
             return false;
         }
-        return $curlRes;
 
+        return $curlRes;
     }
 }

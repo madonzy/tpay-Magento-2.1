@@ -1,110 +1,117 @@
 <?php
-
 /**
  *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
 
 namespace tpaycom\tpay\Controller\tpay;
 
+use Magento\Checkout\Model\Session;
+use Magento\Framework\App\Action\Action;
+use Magento\Framework\App\Action\Context;
+use tpaycom\tpay\Api\TpayInterface;
+use tpaycom\tpay\Model\TransactionFactory;
+use tpaycom\tpay\Model\Transaction;
+use tpaycom\tpay\Service\TpayService;
+
 /**
  * Class Blik
+ *
  * @package tpaycom\tpay\Controller\tpay
  */
-
-class Blik extends \Magento\Framework\App\Action\Action
+class Blik extends Action
 {
     /**
-     * @var \Magento\Framework\App\Config\ScopeConfigInterface
+     * @var TpayService
      */
-    private $scopeConfig;
+    protected $tpayService;
 
     /**
-     * @var \Magento\Framework\Registry
+     * @var Session
      */
-    private $registry;
+    protected $checkoutSession;
 
+    /**
+     * @var TpayInterface
+     */
     private $tpay;
 
+    /**
+     * @var Transaction
+     */
     private $transaction;
 
-    private $orderModel;
-
+    /**
+     * @var TransactionFactory
+     */
     private $transactionFactory;
 
     /**
-     * Blik constructor.
-     * @param \Magento\Framework\App\Action\Context $context
-     * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
-     * @param \Magento\Framework\Registry $registry
-     * @param \tpaycom\tpay\Model\Tpay $tpayModel
-     * @param \Magento\Sales\Model\Order $orderModel
+     * {@inheritdoc}
+     *
+     * @param TpayInterface      $tpayModel
+     * @param TransactionFactory $transactionFactory
+     * @param TpayService        $tpayService
      */
     public function __construct(
-        \Magento\Framework\App\Action\Context $context,
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Framework\Registry $registry,
-        \tpaycom\tpay\Model\Tpay $tpayModel,
-        \Magento\Sales\Model\Order $orderModel,
-        \tpaycom\tpay\Model\TransactionFactory $transactionFactory
-
+        Context $context,
+        TpayInterface $tpayModel,
+        TransactionFactory $transactionFactory,
+        TpayService $tpayService,
+        Session $checkoutSession
     ) {
-        $this->scopeConfig = $scopeConfig;
-        $this->registry = $registry;
-        parent::__construct($context);
-        $this->tpay = $tpayModel;
-        $this->orderModel = $orderModel;
+        $this->tpay               = $tpayModel;
         $this->transactionFactory = $transactionFactory;
+        $this->tpayService        = $tpayService;
+        $this->checkoutSession = $checkoutSession;
+
+        parent::__construct($context);
     }
 
     /**
-     * @return void
+     * {@inheritdoc}
      */
     public function execute()
     {
-        $session = $this->_objectManager->get('Magento\Checkout\Model\Session');
-
-        $orderId = $session->getLastRealOrderId();
+        $orderId = $this->checkoutSession->getLastRealOrderId();
 
         if ($orderId) {
-            $order = $this->orderModel->loadByIncrementId($orderId);
-            $paymentData = $order->getPayment()->getData();
-            $order->addStatusToHistory(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT, __('Waiting for payment.'));
-            $order->setSendEmail(true);
-            $order->save();
+            $paymentData = $this->tpayService->getPaymentData($orderId);
+
+            $this->tpayService->setOrderStatePendingPayment($orderId, true);
 
             $pass = $this->tpay->getApiPassword();
-
-            $key = $this->tpay->getApiKey();
+            $key  = $this->tpay->getApiKey();
 
             $this->transaction = $this->transactionFactory->create(['apiPassword' => $pass, 'apiKey' => $key]);
 
             $additionalPaymentInformation = $paymentData['additional_information'];
 
             $result = $this->makeBlikPayment($orderId, $additionalPaymentInformation);
-            $session->unsQuoteId();
+            $this->checkoutSession->unsQuoteId();
 
             if (!$result) {
-                $this->_redirect('tpay/tpay/Error');
-            } else {
-                $this->_redirect('tpay/tpay/Success');
+                return $this->_redirect('tpay/tpay/error');
             }
+
+            return $this->_redirect('tpay/tpay/success');
         }
     }
 
-    /** Create  BLIK Payment for transaction data
-     * @param $orderId
-     * @param $additionalPaymentInformation
+    /**
+     * Create  BLIK Payment for transaction data
+     *
+     * @param int   $orderId
+     * @param array $additionalPaymentInformation
+     *
      * @return bool
      */
-
-    private function makeBlikPayment($orderId, $additionalPaymentInformation)
+    protected function makeBlikPayment($orderId, array $additionalPaymentInformation)
     {
-        $data = $this->tpay->getTpayFormData($orderId);
-
+        $data     = $this->tpay->getTpayFormData($orderId);
         $blikCode = $additionalPaymentInformation['blik_code'];
 
         unset($additionalPaymentInformation['blik_code']);
@@ -120,13 +127,15 @@ class Blik extends \Magento\Framework\App\Action\Action
         return $this->blikPay($blikTransactionId, $blikCode);
     }
 
-    /**Send BLIK code for transaction id
-     * @param $blikTransactionId
-     * @param $blikCode
-     * @return mixed
+    /**
+     * Send BLIK code for transaction id
+     *
+     * @param string $blikTransactionId
+     * @param string $blikCode
+     *
+     * @return bool
      */
-
-    private function blikPay($blikTransactionId, $blikCode)
+    protected function blikPay($blikTransactionId, $blikCode)
     {
         return $this->transaction->sendBlikCode($blikTransactionId, $blikCode);
     }

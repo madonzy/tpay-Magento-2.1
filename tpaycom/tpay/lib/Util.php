@@ -18,19 +18,19 @@ namespace tpaycom\tpay\lib;
  *  - log library operations
  *  - handle POST array
  *
- *
+ * @package tpaycom\tpay\lib
  */
 class Util
 {
-
     /**
      * Get value from  array.
      * If not exists return false
      *
      * @param string $name
-     * @param string $type variable type
+     * @param string $type   variable type
      *
-     * @param null $params array
+     * @param null   $params array
+     *
      * @return mixed
      * @throws TException
      */
@@ -61,7 +61,7 @@ class Util
      * Get substring by pattern
      *
      * @param string $pattern pattern
-     * @param string $string content
+     * @param string $string  content
      *
      * @return string
      */

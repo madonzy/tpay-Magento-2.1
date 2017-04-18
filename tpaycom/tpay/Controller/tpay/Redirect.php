@@ -1,102 +1,110 @@
 <?php
-
 /**
+ *
  * @category    payment gateway
- * @package     tpaycom_tpay
- * @author      tpay.com
+ * @package     Tpaycom_Magento2.1
+ * @author      Tpay.com
  * @copyright   (https://tpay.com)
  */
 
 namespace tpaycom\tpay\Controller\tpay;
 
-use Magento\Framework\Exception\CouldNotSaveException;
+use Magento\Framework\App\Action\Action;
+use Magento\Framework\App\Action\Context;
+use tpaycom\tpay\Api\TpayInterface;
+use tpaycom\tpay\Block\Payment\tpay\Redirect as RedirectBlock;
 use tpaycom\tpay\Model\Transaction;
+use tpaycom\tpay\Service\TpayService;
+use Magento\Checkout\Model\Session;
 
 /**
  * Class Redirect
+ *
  * @package tpaycom\tpay\Controller\tpay
  */
-class Redirect extends \Magento\Framework\App\Action\Action
+class Redirect extends Action
 {
     /**
-     * @var \Magento\Framework\App\Config\ScopeConfigInterface
+     * @var Session
      */
-    private $scopeConfig;
+    protected $checkoutSession;
 
     /**
-     * @var \Magento\Framework\Registry
+     * @var TpayService
      */
-    private $registry;
+    protected $tpayService;
 
+    /**
+     * @var TpayInterface
+     */
     private $tpay;
-
-    private $request;
 
     /**
      * Redirect constructor.
-     * @param \Magento\Framework\App\Action\Context $context
-     * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
-     * @param \Magento\Framework\Registry $registry
+     *
+     * @param Context        $context
+     * @param TpayInterface  $tpayModel
+     * @param TpayService    $tpayService
+     * @param Session        $checkoutSession
      */
     public function __construct(
-        \Magento\Framework\App\Action\Context $context,
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Framework\Registry $registry,
-        \Magento\Framework\App\RequestInterface $request,
-        \tpaycom\tpay\Model\Tpay $tpayModel
+        Context $context,
+        TpayInterface $tpayModel,
+        TpayService $tpayService,
+        Session $checkoutSession
     ) {
-        $this->scopeConfig = $scopeConfig;
-        $this->registry = $registry;
-        $this->request = $request;
+        $this->tpayService     = $tpayService;
+        $this->checkoutSession = $checkoutSession;
+        $this->tpay            = $tpayModel;
 
         parent::__construct($context);
-        $this->tpay = $tpayModel;
     }
 
     /**
-     * @return void
+     * {@inheritdoc}
      */
     public function execute()
     {
-        $uid = $this->request->getParam('uid');
-
-        $session = $this->_objectManager->get('Magento\Checkout\Model\Session');
-
-        $orderId = $session->getLastRealOrderId();
+        $uid     = $this->getRequest()->getParam('uid');
+        $orderId = $this->checkoutSession->getLastRealOrderId();
 
         if (!$orderId || !$uid) {
-            $this->_redirect('checkout/cart');
-
-            return;
+            return $this->_redirect('checkout/cart');
         }
 
-        $order = $this->_objectManager->create('Magento\Sales\Model\Order')->loadByIncrementId($orderId);
-        $paymentData = $order->getPayment()->getData();
-
+        $paymentData                  = $this->tpayService->getPaymentData($orderId);
         $additionalPaymentInformation = $paymentData['additional_information'];
 
         if (!empty($additionalPaymentInformation['blik_code'])
-            && $this->tpay->checkBlikLevel0Settings() &&
-            $additionalPaymentInformation['kanal'] == Transaction::BLIK_CHANNEL
+            && $this->tpay->checkBlikLevel0Settings()
+            && $additionalPaymentInformation['kanal'] == Transaction::BLIK_CHANNEL
         ) {
-            $this->_redirect('tpay/tpay/Blik');
+            return $this->_redirect('tpay/tpay/Blik');
         } else {
+            $this->tpayService->setOrderStatePendingPayment($orderId, true);
+
             $this->redirectToPayment($orderId, $additionalPaymentInformation);
 
-            $session->unsQuoteId();
+            $this->checkoutSession->unsQuoteId();
         }
     }
 
-    /** Redirect to tpay.com
-     * @param $orderId
-     * @param $additionalPaymentInformation
+    /**
+     * Redirect to tpay.com
+     *
+     * @param int   $orderId
+     * @param array $additionalPaymentInformation
      */
-
-    private function redirectToPayment($orderId, $additionalPaymentInformation)
+    private function redirectToPayment($orderId, array $additionalPaymentInformation)
     {
+        /** @var RedirectBlock $redirectBlock */
+        $redirectBlock = $this->_view->getLayout()->createBlock('tpaycom\tpay\Block\Payment\tpay\Redirect');
+        $redirectBlock
+            ->setOrderId($orderId)
+            ->setAdditionalPaymentInformation($additionalPaymentInformation);
+
         $this->getResponse()->setBody(
-            $this->_view->getLayout()->createBlock(
-                'tpaycom\tpay\Block\Payment\tpay\Redirect')->getFormHtml($orderId, $additionalPaymentInformation)
+            $redirectBlock->toHtml()
         );
     }
 }
