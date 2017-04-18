@@ -9,9 +9,12 @@
 
 namespace tpaycom\tpay\Service;
 
+use Magento\Quote\Api\CartRepositoryInterface;
+use Magento\Quote\Model\Quote;
 use Magento\Sales\Model\Order\Payment\Transaction;
 use Magento\Sales\Model\Order;
 use tpaycom\tpay\Api\Sales\OrderRepositoryInterface;
+use tpaycom\tpay\Api\TpayInterface;
 use tpaycom\tpay\lib\ResponseFields;
 
 /**
@@ -27,14 +30,22 @@ class TpayService
     protected $orderRepository;
 
     /**
+     * @var CartRepositoryInterface
+     */
+    protected $cartRepository;
+
+    /**
      * Tpay constructor.
      *
      * @param OrderRepositoryInterface $orderRepository
+     * @param CartRepositoryInterface  $cartRepository
      */
     public function __construct(
-        OrderRepositoryInterface $orderRepository
+        OrderRepositoryInterface $orderRepository,
+        CartRepositoryInterface $cartRepository
     ) {
         $this->orderRepository = $orderRepository;
+        $this->cartRepository  = $cartRepository;
     }
 
     /**
@@ -77,17 +88,41 @@ class TpayService
     }
 
     /**
+     * Set unique value for tpay_unique_md5 field
+     *
+     * @param Quote $quote
+     */
+    public function initTpayUniqueMd5(Quote $quote)
+    {
+        $quote->setData(TpayInterface::UNIQUE_MD5_KEY, md5(uniqid()));
+
+        $this->cartRepository->save($quote);
+    }
+
+    /**
+     * Set unique value for tpay_unique_md5 field
+     *
+     * @param Quote $quote
+     */
+    public function unsetTpayUniqueMd5(Quote $quote)
+    {
+        $quote->setData(TpayInterface::UNIQUE_MD5_KEY, null);
+
+        $this->cartRepository->save($quote);
+    }
+
+    /**
      * Validate order and set appropriate state
      *
-     * @param int   $orderId
-     * @param array $validParams
+     * @param string $tpayUniqueMd5
+     * @param array  $validParams
      *
      * @return bool|Order
      */
-    public function validateOrderAndSetStatus($orderId, array $validParams)
+    public function validateOrderAndSetStatus($tpayUniqueMd5, array $validParams)
     {
         /** @var Order $order */
-        $order = $this->orderRepository->getByIncrementId($orderId);
+        $order = $this->orderRepository->getByTpayUniqueMd5($tpayUniqueMd5);
 
         if (!$order->getId()) {
             return false;
@@ -110,13 +145,13 @@ class TpayService
                 $emailNotify = true;
             }
             $status = __('The payment from tpay.com has been accepted.').'</br>'.$transactionDesc;
-            $state = Order::STATE_PROCESSING;
+            $state  = Order::STATE_PROCESSING;
         } else {
             if ($order->getState() != Order::STATE_HOLDED) {
                 $emailNotify = true;
             }
             $status = __('Payment has been canceled: ').'</br>'.$transactionDesc;
-            $state = Order::STATE_HOLDED;
+            $state  = Order::STATE_HOLDED;
         }
 
         $order->setState($state);

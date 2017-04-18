@@ -14,6 +14,7 @@ use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Response\Http;
 use Magento\Framework\HTTP\PhpEnvironment\RemoteAddress;
 use tpaycom\tpay\Api\TpayInterface;
+use tpaycom\tpay\lib\PaymentBasic;
 use tpaycom\tpay\lib\PaymentBasicFactory;
 use tpaycom\tpay\lib\ResponseFields;
 use tpaycom\tpay\Service\TpayService;
@@ -80,20 +81,20 @@ class Notification extends Action
             $id   = $this->tpay->getMerchantId();
             $code = $this->tpay->getSecurityCode();
 
+            /** @var PaymentBasic $paymentBasic */
             $paymentBasic = $this->paymentBasicFactory->create(['merchantId' => $id, 'merchantSecret' => $code]);
+            $params       = $this->getRequest()->getParams();
 
-            $params      = $this->getRequest()->getParams();
-            $validParams = $paymentBasic->checkPayment($this->remoteAddress->getRemoteAddress(), $params);
-            $orderId     = base64_decode($validParams[ResponseFields::TR_CRC]);
+            $validParams   = $paymentBasic->checkPayment($this->remoteAddress->getRemoteAddress(), $params);
+            $tpayUniqueMd5 = base64_decode($validParams[ResponseFields::TR_CRC]);
 
-            $this->tpayService->validateOrderAndSetStatus($orderId, $validParams);
+            $this->tpayService->validateOrderAndSetStatus($tpayUniqueMd5, $validParams);
 
             return
                 $this
                     ->getResponse()
                     ->setStatusCode(Http::STATUS_CODE_200)
                     ->setContent('TRUE');
-
         } catch (\Exception $e) {
             return false;
         }

@@ -63,6 +63,7 @@ class TpayConfigProvider implements ConfigProviderInterface
             'tpay' => [
                 'payment' => [
                     'redirectUrl'         => $tpay->getPaymentRedirectUrl(),
+                    'blikUrl'             => $tpay->getBlikUrl(),
                     'tpayLogoUrl'         => $this->generateURL('tpaycom_tpay::images/logo_tpay.png'),
                     'merchantId'          => $tpay->getMerchantId(),
                     'showPaymentChannels' => $this->showChannels(),

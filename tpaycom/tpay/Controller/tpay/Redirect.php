@@ -79,10 +79,14 @@ class Redirect extends Action
             && $this->tpay->checkBlikLevel0Settings()
             && $additionalPaymentInformation['kanal'] == Transaction::BLIK_CHANNEL
         ) {
-            return $this->_redirect('tpay/tpay/Blik');
+            $this->tpayService->setOrderStatePendingPayment($orderId, true);
+            $this->checkoutSession->unsQuoteId();
+
+            return $this->_redirect('tpay/tpay/success');
         } else {
             $this->tpayService->setOrderStatePendingPayment($orderId, true);
 
+            $this->tpayService->initTpayUniqueMd5($this->checkoutSession->getQuote());
             $this->redirectToPayment($orderId, $additionalPaymentInformation);
 
             $this->checkoutSession->unsQuoteId();

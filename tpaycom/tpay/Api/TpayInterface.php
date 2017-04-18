@@ -38,6 +38,13 @@ interface TpayInterface
     const TERMS_ACCEPT = 'akceptuje_regulamin';
 
     /**
+     * Unique field name in quote and order
+     *
+     * @var string
+     */
+    const UNIQUE_MD5_KEY = 'tpay_unique_md5';
+
+    /**
      * Return string for redirection
      *
      * @return string
@@ -47,11 +54,12 @@ interface TpayInterface
     /**
      * Return data for form
      *
-     * @param null|int $orderId
+     * @param null|int    $orderId
+     * @param null|string $email
      *
      * @return array
      */
-    public function getTpayFormData($orderId = null);
+    public function getTpayFormData($orderId = null, $email = null);
 
     /**
      * @return string
@@ -101,6 +109,13 @@ interface TpayInterface
      * @return string
      */
     public function getPaymentRedirectUrl();
+
+    /**
+     * Return url to Blik request
+     *
+     * @return string
+     */
+    public function getBlikUrl();
 
     /**
      * Return url for a tpay.com terms

@@ -20,11 +20,12 @@ use Magento\Framework\UrlInterface;
 use Magento\Framework\Escaper;
 use Magento\Payment\Helper\Data;
 use Magento\Payment\Model\Method\AbstractMethod;
-use Magento\Payment\Model\Method\Adapter;
 use Magento\Payment\Model\Method\Logger;
 use Magento\Quote\Api\Data\CartInterface;
+use Magento\Quote\Model\Quote;
 use tpaycom\tpay\Api\Sales\OrderRepositoryInterface;
 use tpaycom\tpay\Api\TpayInterface;
+
 /**
  * Class Tpay
  *
@@ -208,28 +209,38 @@ class Tpay extends AbstractMethod implements TpayInterface
     /**
      * {@inheritdoc}
      */
-    public function getTpayFormData($orderId = null)
+    public function getTpayFormData($orderId = null, $email = null)
     {
-        $order          = $this->getOrder($orderId);
-        $billingAddress = $order->getBillingAddress();
-        $amount         = number_format($order->getGrandTotal(), 2);
+        $instance = (null === $orderId) ? $this->getQuote() : $this->getOrder($orderId);
+
+        if (null === $email) {
+            $email = $instance->getCustomerEmail();
+
+            if (null === $email) {
+                throw new \Exception('Undefined email was supplied to Blik request.');
+            }
+        }
+
+        $billingAddress = $instance->getBillingAddress();
+        $amount         = number_format($instance->getGrandTotal(), 2);
         $merchantId     = $this->getMerchantId();
         $securityCode   = $this->getSecurityCode();
-        $crc            = base64_encode($orderId);
+        $crc            = base64_encode($instance->getData(TpayInterface::UNIQUE_MD5_KEY));
         $md5sum         = md5($merchantId.$amount.$crc.$securityCode);
         $name           = $billingAddress->getData('firstname').' '.$billingAddress->getData('lastname');
+
         return [
             'id'           => $merchantId,
-            'email'        => $this->escaper->escapeHtml($order->getCustomerEmail()),
+            'email'        => $this->escaper->escapeHtml($email),
             'nazwisko'     => $this->escaper->escapeHtml($name),
             'kwota'        => $amount,
-            'opis'         => 'Zamówienie ' . $orderId,
+            'opis'         => 'Zamówienie Magento',
             'md5sum'       => $md5sum,
             'crc'          => $crc,
-            'adres'        => $this->escaper->escapeHtml($order->getBillingAddress()->getData('street')),
-            'miasto'       => $this->escaper->escapeHtml($order->getBillingAddress()->getData('city')),
-            'kod'          => $this->escaper->escapeHtml($order->getBillingAddress()->getData('postcode')),
-            'kraj'         => $this->escaper->escapeHtml($order->getBillingAddress()->getData('country_id')),
+            'adres'        => $this->escaper->escapeHtml($instance->getBillingAddress()->getData('street')),
+            'miasto'       => $this->escaper->escapeHtml($instance->getBillingAddress()->getData('city')),
+            'kod'          => $this->escaper->escapeHtml($instance->getBillingAddress()->getData('postcode')),
+            'kraj'         => $this->escaper->escapeHtml($instance->getBillingAddress()->getData('country_id')),
             'pow_url_blad' => $this->urlBuilder->getUrl('tpay/tpay/error'),
             'wyn_url'      => $this->urlBuilder->getUrl('tpay/tpay/notification'),
             'pow_url'      => $this->urlBuilder->getUrl('tpay/tpay/success'),
@@ -243,6 +254,14 @@ class Tpay extends AbstractMethod implements TpayInterface
     public function getPaymentRedirectUrl()
     {
         return $this->urlBuilder->getUrl('tpay/tpay/redirect', ['uid' => time().uniqid(true)]);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getBlikUrl()
+    {
+        return $this->urlBuilder->getUrl('tpay/tpay/blik');
     }
 
     /**
@@ -270,6 +289,11 @@ class Tpay extends AbstractMethod implements TpayInterface
         }
 
         return parent::isAvailable($quote);
+    }
+
+    public function validate()
+    {
+        return false;
     }
 
     /**
@@ -351,5 +375,13 @@ class Tpay extends AbstractMethod implements TpayInterface
         }
 
         return $this->orderRepository->getByIncrementId($orderId);
+    }
+
+    /**
+     * @return Quote
+     */
+    protected function getQuote()
+    {
+        return $this->getCheckout()->getQuote();
     }
 }

@@ -16,6 +16,7 @@ use tpaycom\tpay\Api\TpayInterface;
 use tpaycom\tpay\Model\TransactionFactory;
 use tpaycom\tpay\Model\Transaction;
 use tpaycom\tpay\Service\TpayService;
+use Magento\Framework\App\Response\Http;
 
 /**
  * Class Blik
@@ -66,7 +67,7 @@ class Blik extends Action
         $this->tpay               = $tpayModel;
         $this->transactionFactory = $transactionFactory;
         $this->tpayService        = $tpayService;
-        $this->checkoutSession = $checkoutSession;
+        $this->checkoutSession    = $checkoutSession;
 
         parent::__construct($context);
     }
@@ -76,42 +77,51 @@ class Blik extends Action
      */
     public function execute()
     {
-        $orderId = $this->checkoutSession->getLastRealOrderId();
+        $data                         = $this->getRequest()->getParams();
+        $additionalPaymentInformation = isset($data['additional_data']) ? $data['additional_data'] : [];
+        $content                      = 'TRUE';
 
-        if ($orderId) {
-            $paymentData = $this->tpayService->getPaymentData($orderId);
+        if (isset($additionalPaymentInformation[TpayInterface::TERMS_ACCEPT]) && $additionalPaymentInformation[TpayInterface::TERMS_ACCEPT] === 'on') {
+            if (isset($additionalPaymentInformation['blik_code']) && strlen($additionalPaymentInformation['blik_code']) === 6) {
+                $pass = $this->tpay->getApiPassword();
+                $key  = $this->tpay->getApiKey();
 
-            $this->tpayService->setOrderStatePendingPayment($orderId, true);
+                $this->transaction = $this->transactionFactory->create(['apiPassword' => $pass, 'apiKey' => $key]);
 
-            $pass = $this->tpay->getApiPassword();
-            $key  = $this->tpay->getApiKey();
+                $this->tpayService->initTpayUniqueMd5($this->checkoutSession->getQuote());
+                $result = $this->makeBlikPayment($additionalPaymentInformation);
 
-            $this->transaction = $this->transactionFactory->create(['apiPassword' => $pass, 'apiKey' => $key]);
+                if (!$result) {
+                    $content = 'FALSE';
 
-            $additionalPaymentInformation = $paymentData['additional_information'];
-
-            $result = $this->makeBlikPayment($orderId, $additionalPaymentInformation);
-            $this->checkoutSession->unsQuoteId();
-
-            if (!$result) {
-                return $this->_redirect('tpay/tpay/error');
+                    $this->tpayService->unsetTpayUniqueMd5($this->checkoutSession->getQuote());
+                }
+            } else {
+                $this->tpayService->initTpayUniqueMd5($this->checkoutSession->getQuote());
             }
-
-            return $this->_redirect('tpay/tpay/success');
+        } else {
+            $content = 'FALSE';
         }
+
+        return
+            $this
+                ->getResponse()
+                ->setStatusCode(Http::STATUS_CODE_200)
+                ->setContent($content);
     }
 
     /**
      * Create  BLIK Payment for transaction data
      *
-     * @param int   $orderId
      * @param array $additionalPaymentInformation
      *
      * @return bool
      */
-    protected function makeBlikPayment($orderId, array $additionalPaymentInformation)
+    protected function makeBlikPayment(array $additionalPaymentInformation)
     {
-        $data     = $this->tpay->getTpayFormData($orderId);
+        $email    = isset($additionalPaymentInformation['email']) ? $additionalPaymentInformation['email'] : null;
+
+        $data     = $this->tpay->getTpayFormData(null, $email);
         $blikCode = $additionalPaymentInformation['blik_code'];
 
         unset($additionalPaymentInformation['blik_code']);

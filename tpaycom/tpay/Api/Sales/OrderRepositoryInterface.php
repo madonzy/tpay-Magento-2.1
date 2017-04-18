@@ -25,4 +25,13 @@ interface OrderRepositoryInterface extends MagentoOrderRepositoryInterface
      * @return \Magento\Sales\Api\Data\OrderInterface
      */
     public function getByIncrementId($incrementId);
+
+    /**
+     * Return new instance of Order by tpay_unique_md5
+     *
+     * @param string $md5
+     *
+     * @return \Magento\Sales\Api\Data\OrderInterface
+     */
+    public function getByTpayUniqueMd5($md5);
 }
